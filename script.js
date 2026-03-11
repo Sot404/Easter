@@ -8,6 +8,8 @@ const DOM = {
   title: document.getElementById("title"),
   bunnyField: document.querySelector(".bunny-field"),
   kissContainer: document.querySelector(".kiss-stamps"),
+  eggCount: document.getElementById("eggCount"),
+  speechBubble: document.getElementById("speechBubble"),
 };
 
 const CONFIG = {
@@ -21,10 +23,19 @@ const CONFIG = {
   runMin: 18,
   runMax: 24,
   runMinTail: 12,
+  eggChance: 0.5,
+  eggGoldChance: 0.05,
+  eggOffset: { x: 0.72, y: 0.46 },
+  eggPatterns: ["pattern-1", "pattern-2", "pattern-3"],
 };
 
 const runnerTimers = new WeakMap();
+const runnerEggs = new Map();
 let celebrateTimer;
+let eggCount = 0;
+let orbitTimer;
+let orbitActive = false;
+let thresholdDisabled = false;
 
 const prefersReducedMotion =
   window.matchMedia &&
@@ -37,6 +48,149 @@ const toMs = (value) => {
   const trimmed = value.trim();
   if (trimmed.endsWith("ms")) return parseFloat(trimmed);
   return parseFloat(trimmed) * 1000;
+};
+
+const updateEggCount = () => {
+  if (DOM.eggCount) DOM.eggCount.textContent = `${eggCount}`;
+};
+
+const resetEggCount = () => {
+  eggCount = 0;
+  updateEggCount();
+};
+
+const triggerBunnyOrbit = (message, { resetAfter } = {}) => {
+  if (!DOM.bunny || !DOM.card || !DOM.speechBubble) return;
+  if (orbitActive) return;
+  orbitActive = true;
+
+  const bunny = DOM.bunny;
+  const bubble = DOM.speechBubble;
+  const cardRect = DOM.card.getBoundingClientRect();
+  const bunnyRect = bunny.getBoundingClientRect();
+  const radius =
+    Math.max(cardRect.width, cardRect.height) * 0.55 +
+    Math.max(bunnyRect.width, bunnyRect.height) * 0.35;
+
+  const prevStyle = {
+    position: bunny.style.position,
+    left: bunny.style.left,
+    top: bunny.style.top,
+    transform: bunny.style.transform,
+  };
+
+  bunny.classList.add("is-orbiting");
+  bubble.textContent = message;
+  bubble.classList.add("is-active");
+
+  bunny.style.position = "fixed";
+  bunny.style.left = "0";
+  bunny.style.top = "0";
+
+  const start = performance.now();
+  const duration = 1000;
+  const startAngle = (-55 * Math.PI) / 180;
+  const endAngle = (-5 * Math.PI) / 180;
+
+  const step = (now) => {
+    const t = Math.min((now - start) / duration, 1);
+    const angle = startAngle + (endAngle - startAngle) * t;
+    const centerX = cardRect.left + cardRect.width / 2;
+    const centerY = cardRect.top + cardRect.height / 2;
+    const x = centerX + radius * Math.cos(angle) - bunnyRect.width / 2;
+    const y = centerY + radius * Math.sin(angle) - bunnyRect.height / 2;
+    bunny.style.transform = `translate(${x}px, ${y}px)`;
+    bubble.style.left = `${x + bunnyRect.width * 0.65}px`;
+    bubble.style.top = `${y + bunnyRect.height * 0.1}px`;
+
+    if (t < 1) {
+      orbitTimer = window.requestAnimationFrame(step);
+    } else {
+      // Stay parked to the right of the card after the short arc.
+      const parkX = cardRect.right + Math.max(18, cardRect.width * 0.05);
+      const parkY =
+        cardRect.top + cardRect.height * 0.4 - bunnyRect.height / 2;
+      bunny.style.transform = `translate(${parkX}px, ${parkY}px)`;
+      bubble.style.left = `${parkX + bunnyRect.width * 0.65}px`;
+      bubble.style.top = `${parkY + bunnyRect.height * 0.1}px`;
+      orbitActive = false;
+    }
+  };
+
+  orbitTimer = window.requestAnimationFrame(step);
+
+  if (resetAfter) {
+    window.setTimeout(() => {
+      resetEggCount();
+      bunny.style.position = prevStyle.position;
+      bunny.style.left = prevStyle.left;
+      bunny.style.top = prevStyle.top;
+      bunny.style.transform = prevStyle.transform;
+      bunny.classList.remove("is-orbiting");
+      bubble.classList.remove("is-active");
+    }, resetAfter);
+  }
+};
+
+const positionEgg = (runner, egg) => {
+  const rect = runner.getBoundingClientRect();
+  const x = rect.left + rect.width * CONFIG.eggOffset.x;
+  const y = rect.top + rect.height * CONFIG.eggOffset.y;
+  egg.style.left = `${x}px`;
+  egg.style.top = `${y}px`;
+};
+
+const removeEggForRunner = (runner) => {
+  const egg = runnerEggs.get(runner);
+  if (!egg) return;
+  egg.remove();
+  runnerEggs.delete(runner);
+};
+
+const collectEgg = (runner, egg) => {
+  if (!egg || egg.classList.contains("collected")) return;
+  egg.classList.add("collected");
+  eggCount += 10;
+  updateEggCount();
+
+  if (egg.classList.contains("is-gold")) {
+    thresholdDisabled = true;
+    triggerBunnyOrbit(
+      "Ουάου! Βρήκες το χαμένο μου αυγό! Θα σε αφήσω να παίξεις όσο θες! Ευχαριστώ!"
+    );
+  } else if (!thresholdDisabled && eggCount >= 10) {
+    triggerBunnyOrbit(
+      "Σταμάτα να τον παίζεις και απάντα! Θα είσαι το πασχαλινό μου αυγό νινί;",
+      { resetAfter: 10000 }
+    );
+  }
+  window.setTimeout(() => {
+    egg.remove();
+    runnerEggs.delete(runner);
+  }, 380);
+};
+
+const maybeSpawnEgg = (runner) => {
+  if (runnerEggs.has(runner)) return;
+  if (Math.random() > CONFIG.eggChance) return;
+  const egg = document.createElement("button");
+  egg.type = "button";
+  const isGold = Math.random() < CONFIG.eggGoldChance;
+  if (isGold) {
+    egg.className = "runner-egg is-gold";
+    egg.setAttribute("aria-label", "Collect golden egg");
+  } else {
+    const pattern =
+      CONFIG.eggPatterns[Math.floor(Math.random() * CONFIG.eggPatterns.length)];
+    egg.className = `runner-egg ${pattern}`;
+    egg.setAttribute("aria-label", "Collect egg");
+  }
+  const collect = () => collectEgg(runner, egg);
+  egg.addEventListener("pointerdown", collect);
+  egg.addEventListener("click", collect);
+  positionEgg(runner, egg);
+  document.body.appendChild(egg);
+  runnerEggs.set(runner, egg);
 };
 
 const scatterKisses = () => {
@@ -136,6 +290,11 @@ const clearRunnerTimers = (runner) => {
 
 const setRunnerPose = (runner, pose) => {
   runner.classList.toggle("is-back", pose === "back");
+  if (pose === "back") {
+    maybeSpawnEgg(runner);
+  } else {
+    removeEggForRunner(runner);
+  }
 };
 
 const scheduleRunnerPoses = (runner, durationMs, offsetMs, timeline) => {
@@ -287,6 +446,16 @@ const initPointerTracking = () => {
   );
 };
 
+const initEggs = () => {
+  updateEggCount();
+  window.addEventListener("resize", () => {
+    runnerEggs.forEach((egg, runner) => {
+      positionEgg(runner, egg);
+    });
+  });
+};
+
 setupRandomRunners();
 initButtons();
 initPointerTracking();
+initEggs();
