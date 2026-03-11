@@ -89,7 +89,7 @@ const triggerBunnyOrbit = (message, { resetAfter } = {}) => {
 
   const start = performance.now();
   const duration = 1000;
-  const startAngle = (-55 * Math.PI) / 180;
+  const startAngle = (-50 * Math.PI) / 180;
   const endAngle = (-5 * Math.PI) / 180;
 
   const step = (now) => {
@@ -150,7 +150,7 @@ const removeEggForRunner = (runner) => {
 const collectEgg = (runner, egg) => {
   if (!egg || egg.classList.contains("collected")) return;
   egg.classList.add("collected");
-  eggCount += 10;
+  eggCount += 1;
   updateEggCount();
 
   if (egg.classList.contains("is-gold")) {
