@@ -68,6 +68,9 @@ const triggerBunnyOrbit = (message, { resetAfter } = {}) => {
   const bubble = DOM.speechBubble;
   const cardRect = DOM.card.getBoundingClientRect();
   const bunnyRect = bunny.getBoundingClientRect();
+  const availableRight =
+    window.innerWidth - cardRect.right - Math.max(16, cardRect.width * 0.05);
+  const needsPopout = availableRight < bunnyRect.width + 20;
   const radius =
     Math.max(cardRect.width, cardRect.height) * 0.55 +
     Math.max(bunnyRect.width, bunnyRect.height) * 0.35;
@@ -86,11 +89,22 @@ const triggerBunnyOrbit = (message, { resetAfter } = {}) => {
   bunny.style.position = "fixed";
   bunny.style.left = "0";
   bunny.style.top = "0";
+  bunny.classList.toggle("is-popout", needsPopout);
 
   const start = performance.now();
   const duration = 1000;
   const startAngle = (-50 * Math.PI) / 180;
   const endAngle = (-5 * Math.PI) / 180;
+  const popX = cardRect.left + cardRect.width * 0.52 - bunnyRect.width / 2;
+  const popY = cardRect.top + cardRect.height * 0;
+
+  if (needsPopout) {
+    bunny.style.transform = `translate(${popX}px, ${popY}px)`;
+    bubble.style.left = `${popX + bunnyRect.width * 0.6}px`;
+    bubble.style.top = `${popY - 6}px`;
+    orbitActive = false;
+    return;
+  }
 
   const step = (now) => {
     const t = Math.min((now - start) / duration, 1);
@@ -127,6 +141,7 @@ const triggerBunnyOrbit = (message, { resetAfter } = {}) => {
       bunny.style.top = prevStyle.top;
       bunny.style.transform = prevStyle.transform;
       bunny.classList.remove("is-orbiting");
+      bunny.classList.remove("is-popout");
       bubble.classList.remove("is-active");
     }, resetAfter);
   }

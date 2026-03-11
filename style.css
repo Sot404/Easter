@@ -771,6 +771,11 @@ body {
   animation: none;
 }
 
+.bunny.is-popout {
+  z-index: 4;
+  filter: drop-shadow(0 18px 28px rgba(46, 28, 28, 0.25));
+}
+
 .speech-bubble {
   position: fixed;
   max-width: min(300px, 70vw);
